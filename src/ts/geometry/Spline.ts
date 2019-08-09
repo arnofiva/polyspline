@@ -2,7 +2,7 @@ import { Polyline, SpatialReference } from "esri/geometry";
 import * as geometryEngine from "esri/geometry/geometryEngine";
 import * as Point from "esri/geometry/Point";
 
-export default class Spline {
+class Spline {
 
   private spatialReference: SpatialReference;
 
@@ -56,7 +56,27 @@ export default class Spline {
     return this.interpolateAbsolute(xAbs);
   }
 
-  private interpolateAbsolute(xAbs: number) {
+  public createPolyline = (count: number = 50): Polyline => {
+    const spatialReference = this.spatialReference;
+    const path = [];
+
+    const xs = this.xs;
+    const length = this.xs.length;
+    path.push(this.interpolateAbsolute(length ? xs[0] : 0));
+    for (let i = 1; i < this.xs.length; i++) {
+      for (let j = 1; j <= count; j++) {
+        const xAbs = xs[i-1] + (xs[i] - xs[i-1]) * (j * 1.0 / count);
+        path.push(this.interpolateAbsolute(xAbs));
+      }
+    }
+
+    return new Polyline({
+      paths: [path],
+      spatialReference,
+    });
+  }
+
+  private interpolateAbsolute = (xAbs: number): number[] => {
     let i = 0;
     const xs = this.xs;
     while (i < xs.length - 1 && xAbs > xs[i + 1]) {
@@ -112,4 +132,4 @@ export default class Spline {
 
 }
 
-
+export = Spline;

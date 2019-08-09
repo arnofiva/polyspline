@@ -1,2 +1,2 @@
 
-import SplineLayerProxy from "./layers/SplineLayerProxy";
+import SplineLayerProxy = require("./layers/SplineLayerProxy");

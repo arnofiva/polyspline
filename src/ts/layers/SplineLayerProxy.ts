@@ -6,143 +6,163 @@ import * as SpatialReference from "esri/geometry/SpatialReference";
 import * as Graphic from "esri/Graphic";
 import * as FeatureLayer from "esri/layers/FeatureLayer";
 import * as GeoJSONLayer from "esri/layers/GeoJSONLayer";
-import Renderer = require("esri/renderers/Renderer");
+import * as jsonUtils from "esri/renderers/support/jsonUtils";
 import * as FeatureSet from "esri/tasks/support/FeatureSet";
 
-import Spline from "./../geometry/Spline";
+import Spline = require("./../geometry/Spline");
 
-export type SourceLayer = FeatureLayer | GeoJSONLayer;
+type lineLayer = FeatureLayer | GeoJSONLayer;
+
+const LINE_OBJECT_ID_FIELD = "_line_objectid";
 
 @subclass("polyspline.layers.SplineLayerProxy")
-export default class SplineLayerProxy extends declared(Accessor) {
+class SplineLayerProxy extends declared(Accessor) {
 
   @property()
-  get sourceLayer(): SourceLayer {
-    return this._get<SourceLayer>("sourceLayer");
+  get lineLayer(): lineLayer {
+    return this._get<lineLayer>("lineLayer");
   }
-  set sourceLayer(layer: SourceLayer) {
+  set lineLayer(layer: lineLayer) {
     if (layer) {
       const refresh = promiseUtils.debounce(this.refreshSplines);
       if (layer.type === "feature") {
         layer.on("edits" as any, refresh);
       }
+      this._set("lineLayer", layer);
+
+      this.initializeSplineLayer();
+    } else {
+      this._set("lineLayer", null);
     }
 
-    this._set("sourceLayer", layer);
   }
 
   @property({ readOnly: true })
-  public tourLayer = new FeatureLayer({
+  public splineLayer = new FeatureLayer({
+    fields: [
+      {
+        name: "OBJECTID",
+        type: "oid"
+      },
+      {
+        name: LINE_OBJECT_ID_FIELD,
+        type: "integer"
+      }],
     geometryType: "polyline",
     objectIdField: "OBJECTID",
+    outFields: ["*"],
     source: [],
     spatialReference: SpatialReference.WebMercator
   });
 
   private existingObjectIds: string[] = [];
 
-  public getSourceGraphic(graphic: Graphic): IPromise<FeatureSet> {
-    const layer = this.sourceLayer;
+  public getLineGraphic(splineGraphic: Graphic): IPromise<Graphic> {
+    const layer = this.lineLayer;
     if (!layer) {
       return promiseUtils.reject("No source layer assigned");
     }
 
+    const objectId = splineGraphic.attributes[LINE_OBJECT_ID_FIELD];
     return layer
       .queryFeatures({
-        objectIds: [graphic.attributes[layer.objectIdField]],
+        objectIds: [objectId],
+        outFields: ["*"],
         returnGeometry: true,
+      })
+      .then((featureSet): Graphic => {
+        if (featureSet.features.length) {
+          return featureSet.features[0];
+        }
+        throw new Error("No such graphic with objectId `{objectId}`");
       });
   }
 
-  private createSpline = (graphic: Graphic): Graphic => {
+  private createSplineGraphic = (graphic: Graphic): Graphic => {
     const geometry = graphic.geometry as Polyline;
-    let paths = [];
-    const spatialReference = this.sourceLayer.spatialReference;
+    let splineGeometry: Polyline;
+    const spatialReference = this.lineLayer.spatialReference;
 
     if (
       geometry.paths.length &&
       2 < geometry.paths[0].length
     ) {
       const spline = new Spline(geometry);
-
-      const count = 10000;
-      const path = [];
-      for (let i = 0; i <= count; i++) {
-        path.push(spline.interpolate(i * 1.0 / count));
-      }
-      paths.push(path);
+      splineGeometry = spline.createPolyline();
     } else {
-      paths = geometry.paths;
-    }
-
-    return new Graphic({
-      attributes: graphic.attributes,
-      geometry: new Polyline({
-        paths,
+      splineGeometry = new Polyline({
+        paths: geometry.paths,
         spatialReference,
       })
+    }
+
+    const splineGraphic = new Graphic({
+      attributes: graphic.attributes,
+      geometry: splineGeometry,
     });
+    splineGraphic.attributes[LINE_OBJECT_ID_FIELD] = graphic.attributes[this.lineLayer.objectIdField];
+    return splineGraphic;
   }
 
-  private refreshSplines = (): IPromise => {
-    const tourLayer = this.tourLayer;
-    const sourceLayer = this.sourceLayer;
+  private initializeSplineLayer = (): IPromise => {
+    const splineLayer = this.splineLayer;
 
-    return sourceLayer
+    return this.lineLayer
         .load()
-        .then((): IPromise<FeatureSet> => {
-          if (sourceLayer.geometryType !== "polyline") {
+        .then((layer) => {
+          if (layer.geometryType !== "polyline") {
             throw new Error(
               "Feature layer must have geometryType 'polyline'"
             );
           }
 
-          const renderer = sourceLayer.renderer;
+          const renderer = layer.renderer;
           if (renderer) {
-            this.tourLayer.renderer = Renderer.fromJSON(renderer.toJSON());
+            splineLayer.renderer = jsonUtils.fromJSON(renderer.toJSON());
           }
-          this.tourLayer.spatialReference = sourceLayer.spatialReference;
-
-          return sourceLayer.queryFeatures();
+          splineLayer.spatialReference = layer.spatialReference;
         })
-        .then((response) => {
-          const graphics = response.features;
-          return graphics
-            .map(this.createSpline)
-            .filter((spline) => !!spline);
-        })
-        .then((splineGraphics) => {
-          const objectIdField = this.sourceLayer.objectIdField;
-          const oldObjectIds = this.existingObjectIds;
+        .then(this.refreshSplines);
+  }
 
-          const objectIds: string[] = [];
-          const updateFeatures: Graphic[] = [];
-          const addFeatures: Graphic[] = [];
-          splineGraphics.forEach((graphic) => {
-            const objectId = graphic.attributes[objectIdField];
-            objectIds.push(objectId);
-            if (0 <= oldObjectIds.indexOf(objectId)) {
-              updateFeatures.push(graphic);
-            } else {
-              addFeatures.push(graphic);
-            }
-          });
+  private refreshSplines = (): IPromise => {
+    const splineLayer = this.splineLayer;
 
-          const deleteFeatures = oldObjectIds
-            .filter(objectId => {
-              return objectIds.indexOf(objectId) < 0;
-            })
-            .map((objectId) => {
-              return { objectId };
-            });
+    return this.lineLayer.queryFeatures()
+      .then((response) => response.features.map(this.createSplineGraphic))
+      .then((splineGraphics) => {
+        const oldObjectIds = this.existingObjectIds;
 
-          this.existingObjectIds = objectIds;
-          return this.tourLayer.applyEdits({
-            addFeatures,
-            deleteFeatures,
-            updateFeatures,
-          });
+        const objectIds: string[] = [];
+        const updateFeatures: Graphic[] = [];
+        const addFeatures: Graphic[] = [];
+        splineGraphics.forEach((splineGraphic) => {
+          const objectId = splineGraphic.attributes[LINE_OBJECT_ID_FIELD];
+          objectIds.push(objectId);
+          if (0 <= oldObjectIds.indexOf(objectId)) {
+            updateFeatures.push(splineGraphic);
+          } else {
+            addFeatures.push(splineGraphic);
+          }
         });
+
+        const deleteFeatures = oldObjectIds
+          .filter(objectId => {
+            return objectIds.indexOf(objectId) < 0;
+          })
+          .map((objectId) => {
+            return { objectId };
+          });
+
+        this.existingObjectIds = objectIds;
+        return splineLayer.applyEdits({
+          addFeatures,
+          deleteFeatures,
+          updateFeatures,
+        });
+      }).then(console.log).catch(console.error);
   }
 
 }
+
+export = SplineLayerProxy;
