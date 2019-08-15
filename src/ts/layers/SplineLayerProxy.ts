@@ -2,7 +2,6 @@ import Accessor = require("esri/core/Accessor");
 import { declared, property, subclass } from "esri/core/accessorSupport/decorators";
 import * as promiseUtils from "esri/core/promiseUtils";
 import { Polyline } from "esri/geometry";
-import * as SpatialReference from "esri/geometry/SpatialReference";
 import * as Graphic from "esri/Graphic";
 import * as FeatureLayer from "esri/layers/FeatureLayer";
 import * as GeoJSONLayer from "esri/layers/GeoJSONLayer";
@@ -10,34 +9,19 @@ import * as jsonUtils from "esri/renderers/support/jsonUtils";
 
 import Spline = require("./../geometry/Spline");
 
-type lineLayer = FeatureLayer | GeoJSONLayer;
+type LineLayerType = FeatureLayer | GeoJSONLayer;
 
 const LINE_OBJECT_ID_FIELD = "_line_objectid";
 
-@subclass("polyspline.layers.SplineLayerProxy")
-class SplineLayerProxy extends declared(Accessor) {
+const createSplineLayer = (layer: FeatureLayer) => {
 
-  @property()
-  get lineLayer(): lineLayer {
-    return this._get<lineLayer>("lineLayer");
+  let renderer = layer.renderer;
+  if (renderer) {
+    renderer = jsonUtils.fromJSON(renderer.toJSON());
   }
-  set lineLayer(layer: lineLayer) {
-    if (layer) {
-      const refresh = promiseUtils.debounce(this.refreshSplines);
-      if (layer.type === "feature") {
-        layer.on("edits" as any, refresh);
-      }
-      this._set("lineLayer", layer);
+  const spatialReference = layer.spatialReference;
 
-      this.initializeSplineLayer();
-    } else {
-      this._set("lineLayer", null);
-    }
-
-  }
-
-  @property({ readOnly: true })
-  public splineLayer = new FeatureLayer({
+  return new FeatureLayer({
     fields: [
       {
         name: "OBJECTID",
@@ -50,10 +34,41 @@ class SplineLayerProxy extends declared(Accessor) {
     geometryType: "polyline",
     objectIdField: "OBJECTID",
     outFields: ["*"],
+    renderer,
     source: [],
-    spatialReference: SpatialReference.WebMercator
+    spatialReference,
   });
+}
 
+@subclass("polyspline.layers.SplineLayerProxy")
+class SplineLayerProxy extends declared(Accessor) {
+
+  @property()
+  get lineLayer(): LineLayerType {
+    return this._get<LineLayerType>("lineLayer");
+  }
+  set lineLayer(layer: LineLayerType) {
+    const oldLayer = this._get("lineLayer");
+    if (oldLayer) {
+      if (oldLayer === layer) {
+        return;
+      }
+      throw new Error("The `lineLayer` property cannot be changed once a layer has been assigned");
+    }
+
+    if (layer) {
+      this._set("lineLayer", layer);
+      this.initializeSplineLayer();
+    }
+  }
+
+  private resolveSplineLayer: (splineLayer: FeatureLayer) => any = null as any;
+  private rejectSplineLayer: (error: any) => any = null as any;
+
+  private splineLayerPromise: IPromise<FeatureLayer> = promiseUtils.create((resolve, reject) => {
+    this.resolveSplineLayer = resolve;
+    this.rejectSplineLayer = reject;
+  });
   private existingObjectIds = new Map<number, number>();
 
   public getLineGraphic(splineGraphic: Graphic): IPromise<Graphic> {
@@ -75,6 +90,10 @@ class SplineLayerProxy extends declared(Accessor) {
         }
         throw new Error("No such graphic with objectId `{objectId}`");
       });
+  }
+
+  public whenSplineLayer(): IPromise<FeatureLayer> {
+    return this.splineLayerPromise;
   }
 
   private createSplineGraphic = (graphic: Graphic): Graphic => {
@@ -102,29 +121,34 @@ class SplineLayerProxy extends declared(Accessor) {
   }
 
   private initializeSplineLayer = (): IPromise => {
-    const splineLayer = this.splineLayer;
+
+    const refreshDebounced = promiseUtils.debounce(this.refresh);
 
     return this.lineLayer
         .load()
         .then((layer) => {
+          layer.on("edits", refreshDebounced);
+
           if (layer.geometryType !== "polyline") {
-            throw new Error(
-              "Feature layer must have geometryType 'polyline'"
+            const error = new Error(
+              "`lineLayer` must have `geometryType` \"polyline\""
             );
+            this.rejectSplineLayer(error);
+            throw error;
           }
 
-          const renderer = layer.renderer;
-          if (renderer) {
-            splineLayer.renderer = jsonUtils.fromJSON(renderer.toJSON());
-          }
-          splineLayer.spatialReference = layer.spatialReference;
-        })
-        .then(this.refreshSplines);
+          const splineLayer = createSplineLayer(layer);
+          this.resolveSplineLayer(splineLayer);
+
+          return refreshDebounced();
+        });
   }
 
-  private refreshSplines = (): IPromise => {
-    const splineLayer = this.splineLayer;
+  private refresh = (): IPromise => {
+    return this.whenSplineLayer().then((splineLayer) => this.refreshSplineLayer(splineLayer));
+  }
 
+  private refreshSplineLayer = (splineLayer: FeatureLayer): IPromise => {
     return this.lineLayer.queryFeatures()
       .then((response) => response.features.map(this.createSplineGraphic))
       .then((splineGraphics) => {
@@ -137,11 +161,11 @@ class SplineLayerProxy extends declared(Accessor) {
           splineGraphic.attributes[LINE_OBJECT_ID_FIELD] = lineObjectId;
 
           if (existingObjectIds.has(lineObjectId)) {
-            splineGraphic.attributes[this.splineLayer.objectIdField] = existingObjectIds.get(lineObjectId);
+            splineGraphic.attributes[splineLayer.objectIdField] = existingObjectIds.get(lineObjectId);
             existingObjectIds.delete(lineObjectId);
             updateFeatures.push(splineGraphic);
           } else {
-            splineGraphic.attributes[this.splineLayer.objectIdField] = null;
+            splineGraphic.attributes[splineLayer.objectIdField] = null;
             addFeatures.push(splineGraphic);
           }
         });
@@ -161,7 +185,7 @@ class SplineLayerProxy extends declared(Accessor) {
           this.existingObjectIds.clear();
           splineGraphics.forEach((splineGraphic) => {
             const lineObjectId = splineGraphic.attributes[LINE_OBJECT_ID_FIELD];
-            const splineObjectId = splineGraphic.attributes[this.splineLayer.objectIdField];
+            const splineObjectId = splineGraphic.attributes[splineLayer.objectIdField];
             this.existingObjectIds.set(lineObjectId, splineObjectId);
           });
           return results;
