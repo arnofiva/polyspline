@@ -19,9 +19,10 @@ const createSplineLayer = (layer: FeatureLayer) => {
   if (renderer) {
     renderer = jsonUtils.fromJSON(renderer.toJSON());
   }
-  const spatialReference = layer.spatialReference;
 
   return new FeatureLayer({
+    definitionExpression: layer.definitionExpression,
+    elevationInfo: JSON.parse(JSON.stringify(layer.elevationInfo)),
     fields: [
       {
         name: "OBJECTID",
@@ -32,11 +33,21 @@ const createSplineLayer = (layer: FeatureLayer) => {
         type: "long"
       }],
     geometryType: "polyline",
+    labelingInfo: layer.labelingInfo ? layer.labelingInfo.map((info) => info.clone()) : undefined as any,
+    labelsVisible: layer.labelsVisible,
+    legendEnabled: layer.legendEnabled,
+    listMode: layer.listMode,
+    maxScale: layer.maxScale,
+    minScale: layer.maxScale,
     objectIdField: "OBJECTID",
+    opacity: layer.opacity,
     outFields: ["*"],
+    popupEnabled: layer.popupEnabled,
+    popupTemplate: layer.popupTemplate ? layer.popupTemplate.clone() : undefined as any,
     renderer,
     source: [],
-    spatialReference,
+    spatialReference: layer.spatialReference,
+    title: layer.title,
   });
 }
 
