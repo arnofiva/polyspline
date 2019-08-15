@@ -7,7 +7,6 @@ import * as Graphic from "esri/Graphic";
 import * as FeatureLayer from "esri/layers/FeatureLayer";
 import * as GeoJSONLayer from "esri/layers/GeoJSONLayer";
 import * as jsonUtils from "esri/renderers/support/jsonUtils";
-import * as FeatureSet from "esri/tasks/support/FeatureSet";
 
 import Spline = require("./../geometry/Spline");
 
@@ -46,7 +45,7 @@ class SplineLayerProxy extends declared(Accessor) {
       },
       {
         name: LINE_OBJECT_ID_FIELD,
-        type: "integer"
+        type: "long"
       }],
     geometryType: "polyline",
     objectIdField: "OBJECTID",
@@ -55,7 +54,7 @@ class SplineLayerProxy extends declared(Accessor) {
     spatialReference: SpatialReference.WebMercator
   });
 
-  private existingObjectIds: string[] = [];
+  private existingObjectIds = new Map<number, number>();
 
   public getLineGraphic(splineGraphic: Graphic): IPromise<Graphic> {
     const layer = this.lineLayer;
@@ -96,12 +95,10 @@ class SplineLayerProxy extends declared(Accessor) {
       })
     }
 
-    const splineGraphic = new Graphic({
+    return new Graphic({
       attributes: graphic.attributes,
       geometry: splineGeometry,
     });
-    splineGraphic.attributes[LINE_OBJECT_ID_FIELD] = graphic.attributes[this.lineLayer.objectIdField];
-    return splineGraphic;
   }
 
   private initializeSplineLayer = (): IPromise => {
@@ -131,36 +128,45 @@ class SplineLayerProxy extends declared(Accessor) {
     return this.lineLayer.queryFeatures()
       .then((response) => response.features.map(this.createSplineGraphic))
       .then((splineGraphics) => {
-        const oldObjectIds = this.existingObjectIds;
+        const existingObjectIds = this.existingObjectIds;
 
-        const objectIds: string[] = [];
         const updateFeatures: Graphic[] = [];
         const addFeatures: Graphic[] = [];
         splineGraphics.forEach((splineGraphic) => {
-          const objectId = splineGraphic.attributes[LINE_OBJECT_ID_FIELD];
-          objectIds.push(objectId);
-          if (0 <= oldObjectIds.indexOf(objectId)) {
+          const lineObjectId = splineGraphic.attributes[this.lineLayer.objectIdField];
+          splineGraphic.attributes[LINE_OBJECT_ID_FIELD] = lineObjectId;
+
+          if (existingObjectIds.has(lineObjectId)) {
+            splineGraphic.attributes[this.splineLayer.objectIdField] = existingObjectIds.get(lineObjectId);
+            existingObjectIds.delete(lineObjectId);
             updateFeatures.push(splineGraphic);
           } else {
+            splineGraphic.attributes[this.splineLayer.objectIdField] = null;
             addFeatures.push(splineGraphic);
           }
         });
 
-        const deleteFeatures = oldObjectIds
-          .filter(objectId => {
-            return objectIds.indexOf(objectId) < 0;
-          })
+        const deleteFeatures = Array.from(existingObjectIds.values())
           .map((objectId) => {
             return { objectId };
           });
 
-        this.existingObjectIds = objectIds;
-        return splineLayer.applyEdits({
+        const edits = {
           addFeatures,
           deleteFeatures,
           updateFeatures,
+        };
+
+        return splineLayer.applyEdits(edits).then((results) => {
+          this.existingObjectIds.clear();
+          splineGraphics.forEach((splineGraphic) => {
+            const lineObjectId = splineGraphic.attributes[LINE_OBJECT_ID_FIELD];
+            const splineObjectId = splineGraphic.attributes[this.splineLayer.objectIdField];
+            this.existingObjectIds.set(lineObjectId, splineObjectId);
+          });
+          return results;
         });
-      }).then(console.log).catch(console.error);
+      });
   }
 
 }
