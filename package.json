@@ -1,7 +1,8 @@
 {
-  "name": "@esri/polyspline",
+  "name": "@jsapi.dev/polyspline",
   "version": "0.0.1",
   "description": "ArcGIS API for JavaScript extension that creates splines from polylines",
+  "private": true,
   "dependencies": {
     "@types/arcgis-js-api": "4.12.0",
     "arcgis-js-api": "4.12.0"
