@@ -20,9 +20,16 @@ const createSplineLayer = (layer: FeatureLayer) => {
     renderer = jsonUtils.fromJSON(renderer.toJSON());
   }
 
+  let elevationInfo: any = layer.elevationInfo;
+
+  // Try to invoke internal clone()
+  if (elevationInfo && typeof elevationInfo.clone === "function") {
+    elevationInfo = elevationInfo.clone();
+  }
+
   return new FeatureLayer({
     definitionExpression: layer.definitionExpression,
-    elevationInfo: JSON.parse(JSON.stringify(layer.elevationInfo)),
+    elevationInfo,
     fields: [
       {
         name: "OBJECTID",
