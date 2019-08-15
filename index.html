@@ -1,0 +1,101 @@
+
+<html>
+
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>ArcGIS JavaScript 4.11</title>
+
+    <style>
+      html, body, #viewDiv {
+        padding: 0;
+        margin: 0;
+        height: 100%;
+        width: 100%;
+      }
+    </style>
+
+    <script type="text/javascript">
+      var dojoConfig = {
+        packages: [{
+          name: "polyspline",
+          location: "https://jsapi.dev/polyspline/lib/",
+        }]
+      };
+    </script>
+
+    <link rel="stylesheet" href="https://js.arcgis.com/4.12/esri/themes/light/main.css">
+    <script src="https://js.arcgis.com/4.12/"></script>
+
+    <script>
+
+      require([
+        "esri/WebScene",
+        "esri/views/SceneView",
+        "esri/layers/GeoJSONLayer",
+
+        "polyspline/layers/SplineLayerProxy",
+      ], function(
+        Map,
+        SceneView,
+        GeoJSONLayer,
+        SplineLayerProxy,
+      ) {
+
+        var map = new Map({
+          basemap: "gray",
+          ground: "world-elevation"
+        });
+
+        var view = new SceneView({
+          container: "viewDiv",
+          map: map,
+          camera: {
+            position: {
+              spatialReference: {
+                latestWkid: 3857,
+                wkid:102100
+              },
+              x: -262582.94703109446,
+              y: 3950618.247694623,
+              z: 5599883.093417862
+            },
+            heading: 21.84056682336079,
+            tilt:17.77561289878475
+          }
+        });
+
+        var route = new GeoJSONLayer({
+          elevationInfo: {
+            mode: "on-the-ground"
+          },
+          url: "./capitals.geojson",
+          renderer: {
+            type: "simple",
+            symbol: {
+              type: "simple-line",
+              width: 5,
+              color: "orange"
+            }
+          }
+        });
+
+        var splineProxy = new SplineLayerProxy({
+          lineLayer: route,
+        });
+
+        splineProxy.whenSplineLayer().then(function(smoothRoute) {
+          map.add(smoothRoute);
+        });
+
+    });
+    </script>
+  </head>
+
+  <body>
+    <div id="viewDiv">
+    </div>
+    <div id="slides"></div>
+  </body>
+
+</html>
