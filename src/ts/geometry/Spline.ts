@@ -25,7 +25,7 @@ class Spline {
       if (index === 0) {
         this.xs.push(0);
       } else {
-        const distance = geometryEngine.distance(prevPoint as Point, point, "meters");
+        const distance = geometryEngine.distance(prevPoint as Point, point, undefined as any);
         this.dxs.push(distance);
         this.xs.push(distance + this.xs[index - 1]);
       }
@@ -43,7 +43,7 @@ class Spline {
 
       const p1 = this.newPoint(values[prevIndex]);
       const p2 = this.newPoint(values[nextIndex]);
-      this.tangentDistances.push(geometryEngine.distance(p1, p2, "meters"));
+      this.tangentDistances.push(geometryEngine.distance(p1, p2, undefined as any));
     });
   }
 
