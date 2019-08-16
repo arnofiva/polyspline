@@ -4,7 +4,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>ArcGIS JavaScript 4.11</title>
+    <title>Lake Zurich Cruise using the ArcGIS API for JavaScript</title>
 
     <style>
       html, body, #viewDiv {
@@ -19,18 +19,17 @@
       var dojoConfig = {
         packages: [{
           name: "polyspline",
-          location: "https://jsapi.dev/polyspline/lib/",
+          location: "./lib",
         }]
       };
     </script>
-
-    <link rel="stylesheet" href="https://js.arcgis.com/4.12/esri/themes/light/main.css">
     <script src="https://js.arcgis.com/4.12/"></script>
+    <link rel="stylesheet" href="https://js.arcgis.com/4.12/esri/themes/light/main.css">
 
     <script>
 
       require([
-        "esri/WebScene",
+        "esri/Map",
         "esri/views/SceneView",
         "esri/layers/GeoJSONLayer",
 
@@ -43,7 +42,7 @@
       ) {
 
         var map = new Map({
-          basemap: "gray",
+          basemap: "topo-vector",
           ground: "world-elevation"
         });
 
@@ -56,25 +55,22 @@
                 latestWkid: 3857,
                 wkid:102100
               },
-              x: -262582.94703109446,
-              y: 3950618.247694623,
-              z: 5599883.093417862
+              x: 960556.5629690815,
+              y: 5951695.610349683,
+              z: 18183.58600143995
             },
-            heading: 21.84056682336079,
-            tilt:17.77561289878475
+            heading: 10.84465819085713,
+            tilt: 51.81490632985075
           }
         });
 
         var route = new GeoJSONLayer({
-          elevationInfo: {
-            mode: "on-the-ground"
-          },
-          url: "./capitals.geojson",
+          url: "./cruise.geojson",
           renderer: {
             type: "simple",
             symbol: {
               type: "simple-line",
-              width: 5,
+              width: 3,
               color: "orange"
             }
           }
