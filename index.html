@@ -19,7 +19,7 @@
       var dojoConfig = {
         packages: [{
           name: "polyspline",
-          location: "./lib",
+          location: "https://jsapi.dev/polyspline/lib/",
         }]
       };
     </script>
@@ -65,7 +65,7 @@
         });
 
         var route = new GeoJSONLayer({
-          url: "./cruise.geojson",
+          url: "./demo/cruise.geojson",
           renderer: {
             type: "simple",
             symbol: {

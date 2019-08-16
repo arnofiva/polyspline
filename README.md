@@ -4,7 +4,7 @@
 
 A live demo is available here: https://jsapi.dev/polyspline
 
-[![screenshot](./screenshot.png)](https://jsapi.dev/polyspline)
+[![screenshot](./demo/screenshot.png)](https://jsapi.dev/polyspline)
 
 The live demo shows one of the long roundtrip cruise of the [ZSG, Zürichsee Schifffahrtsgesellschaft](https://www.zsg.ch/en/timetable-prices/round-trips-scheduled-cruises/dep-zurich).
 
