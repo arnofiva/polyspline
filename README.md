@@ -2,9 +2,9 @@
 
 [ArcGIS API for JavaScript](https://js.arcgis.com/) extension that creates splines from polylines.
 
-A live demo is available here: https://jsapi.dev/polyspline
+A live demo is available here: https://arnofiva.github.io/polyspline
 
-[![screenshot](./demo/screenshot.png)](https://jsapi.dev/polyspline)
+[![screenshot](./demo/screenshot.png)](https://arnofiva.github.io/polyspline)
 
 The live demo shows one of the long roundtrip cruise of the [ZSG, Zürichsee Schifffahrtsgesellschaft](https://www.zsg.ch/en/timetable-prices/round-trips-scheduled-cruises/dep-zurich).
 
@@ -17,7 +17,7 @@ To use the library you must first tell Dojo to load it and import the `SplineLay
   var dojoConfig = {
     packages: [{
       name: "polyspline",
-      location: "https://jsapi.dev/polyspline/lib/",
+      location: "https://arnofiva.github.io/polyspline/lib/",
     }]
   };
 </script>
